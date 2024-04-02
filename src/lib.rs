@@ -15,27 +15,17 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    // The window must be declared after the surface so
-    // it gets dropped after it as the surface contains
-    // unsafe references to the window's resources.
     window: Window,
 }
 
 impl State {
     async fn new(window: Window) -> Self {
         let size = window.inner_size();
-
-        // The instance is a handle to our GPU
-        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
 
-        // # Safety
-        //
-        // The surface needs to live as long as the window that created it.
-        // State owns the window so this should be safe.
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
         let adapter = instance
@@ -52,24 +42,18 @@ impl State {
                 &wgpu::DeviceDescriptor {
                     label: None,
                     features: wgpu::Features::empty(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
                         wgpu::Limits::default()
                     },
                 },
-                // Some(&std::path::Path::new("trace")), // Trace path
                 None,
             )
             .await
             .unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an Srgb surface texture. Using a different
-        // one will result all the colors comming out darker. If you want to support non
-        // Srgb surfaces, you'll need to account for that when drawing to the frame.
         let surface_format = surface_caps
             .formats
             .iter()
@@ -137,9 +121,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -174,8 +158,6 @@ pub async fn run() {
 
     #[cfg(target_arch = "wasm32")]
     {
-        // Winit prevents sizing with CSS, so we have to set
-        // the size manually when on web.
         use winit::dpi::PhysicalSize;
         window.set_inner_size(PhysicalSize::new(450, 400));
 
@@ -191,7 +173,6 @@ pub async fn run() {
             .expect("Couldn't append canvas to document body.");
     }
 
-    // State::new uses async code, so we're going to wait for it to finish
     let mut state = State::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
@@ -228,24 +209,20 @@ pub async fn run() {
                 state.update();
                 match state.render() {
                     Ok(_) => {}
-                    // Reconfigure the surface if it's lost or outdated
+
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                         state.resize(state.size)
                     }
-                    // The system is out of memory, we should probably quit
+
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
 
                     Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
                 }
             }
             Event::RedrawEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually
-                // request it.
                 state.window().request_redraw();
             }
             _ => {}
         }
     });
 }
-
-fn main() {}
