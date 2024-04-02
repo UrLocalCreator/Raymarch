@@ -1,5 +1,5 @@
-mod lib;
-use lib::run;
+use raymarch::run;
+
 fn main() {
-    run();
+    pollster::block_on(run());
 }
